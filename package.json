@@ -1,0 +1,61 @@
+{
+  "name": "@giuseppe.trisciuoglio/pi-rules",
+  "version": "1.0.0",
+  "description": "Cursor/Claude-style project rules for pi: markdown files with optional frontmatter, injected into the agent context only when relevant.",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-extension",
+    "rules",
+    "claude",
+    "cursor",
+    "frontmatter",
+    "system-prompt",
+    "context",
+    "ai-agent"
+  ],
+  "author": "Giuseppe Trisciuoglio",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/giuseppe-trisciuoglio/pi-rules.git"
+  },
+  "bugs": {
+    "url": "https://github.com/giuseppe.trisciuoglio/pi-rules/issues"
+  },
+  "homepage": "https://github.com/giuseppe.trisciuoglio/pi-rules#readme",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "echo 'pi loads TypeScript extensions directly; no build step is required.'",
+    "check": "npm run typecheck",
+    "test": "npm run typecheck && npm run test:smoke",
+    "test:smoke": "tsx test/smoke-test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.80.2",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.6.0"
+  },
+  "pi": {
+    "name": "pi-rules",
+    "displayName": "Pi Rules",
+    "description": "Project rules with Cursor-style frontmatter, injected into the agent context only when relevant.",
+    "category": "developer-tools",
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}
