@@ -29,6 +29,7 @@
   },
   "files": [
     "src",
+    "prompts",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"
@@ -56,6 +57,9 @@
     "category": "developer-tools",
     "extensions": [
       "./src/index.ts"
+    ],
+    "prompts": [
+      "./prompts"
     ]
   }
 }

@@ -8,6 +8,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseFrontmatter, parseGlobs, parseRuleContent, parseRuleFile, type Rule, type RuleFileRef } from "../src/parser";
 import { ruleSources, scanRuleFiles } from "../src/sources";
 import { ruleMatchesPath } from "../src/matcher";
@@ -163,6 +164,19 @@ for (const [label, globs, toolPath, expected] of matchCases) {
 	check("report: header count", report.includes("2 rules"), true);
 	check("report: missing frontmatter row", report.includes("⚠ no frontmatter"), true);
 	check("report: warnings section", report.includes("without frontmatter"), true);
+}
+
+// ─── Package prompt template ────────────────────────────────────────────────
+
+{
+	const templatePath = fileURLToPath(new URL("../prompts/extract-rules.md", import.meta.url));
+	const raw = fs.readFileSync(templatePath, "utf8");
+	const { data, body, hasFrontmatter } = parseFrontmatter(raw);
+	check("template: frontmatter detected", hasFrontmatter, true);
+	check("template: description present", typeof data.description === "string" && data.description.length > 0, true);
+	check("template: free-text arguments", body.includes("${ARGUMENTS"), true);
+	check("template: bans alwaysApply", body.includes("Never emit `alwaysApply`"), true);
+	check("template: two-phase flow", body.includes("Phase 1") && body.includes("Phase 2"), true);
 }
 
 // ─── Optional: live preview against a real project ──────────────────────────
