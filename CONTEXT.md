@@ -27,3 +27,7 @@ _Avoid_: rules folder, origin
 **Activation**:
 The one-time injection of a Globs Rule's full content into a tool result when the agent touches a matching file. Happens at most once per session per Rule; resets on rescan.
 _Avoid_: trigger, firing
+
+**Rule Extraction**:
+The derivation of Rules from conventions actually observed in a codebase, performed by the `/extract-rules` prompt template shipped with the package. Extraction produces Globs Rules or On-Demand Rules — never Always-Apply Rules — written as individual files into the project's `.pi/rules` Rule Source.
+_Avoid_: import, bootstrap, generation

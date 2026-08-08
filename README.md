@@ -53,8 +53,15 @@ Name collisions are resolved by precedence: **project shadows user**; at the sam
 - `/rules` — status report (rules by channel, sizes, globs, activated-this-session, warnings)
 - `/rules reload` — rescan the sources without a full `/reload`
 - `/rules hide` — dismiss the report widget
+- `/extract-rules [hints]` — distill codebase conventions into new rule files (see below)
 
 The index is rebuilt on session start and on `/reload`; a rescan also resets the globs activation dedup, so edited rules can be injected again.
+
+### Extracting rules from a codebase
+
+The package ships an `/extract-rules` prompt template that turns the agent into a convention extractor. It explores the project with its own tools, presents a numbered list of candidate patterns with confidence levels, and — once you pick — writes one file per rule into `.pi/rules/` with kebab-case names. Extracted rules are always **Globs** or **On-Demand** rules: promotion to always-apply stays a human decision. Existing rules are read first and extended rather than overwritten. Run `/rules reload` afterwards to validate and activate them.
+
+Optional free-text hints steer the scan: `/extract-rules focus on the billing module, stack NestJS`.
 
 ## Budget guardrails
 
