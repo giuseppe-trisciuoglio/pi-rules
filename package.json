@@ -18,7 +18,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/giuseppe-trisciuoglio/pi-rules.git"
+    "url": "git+https://github.com/giuseppe-trisciuoglio/pi-rules.git"
   },
   "bugs": {
     "url": "https://github.com/giuseppe.trisciuoglio/pi-rules/issues"
