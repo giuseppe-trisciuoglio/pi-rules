@@ -1,6 +1,6 @@
 # Pi Rules
 
-Cursor/Claude-style project rules for [pi](https://github.com/earendil-works/pi-coding-agent): markdown files with optional frontmatter, injected into the agent context **only when relevant** — instead of stuffing every convention into the system prompt on every turn.
+Cursor/Claude-style project rules for [pi](https://github.com/earendil-works/pi): markdown files with optional frontmatter, injected into the agent context **only when relevant** — instead of stuffing every convention into the system prompt on every turn.
 
 ## How it works
 
@@ -76,6 +76,8 @@ Nothing is ever truncated silently. If always-applied rules exceed ~10KB of syst
 
 ```bash
 pi install git:github.com/giuseppe-trisciuoglio/pi-rules
+# or from npm:
+pi install npm:@giuseppe.trisciuoglio/pi-rules
 # or from a local checkout:
 pi install /path/to/pi-rules
 # or try without installing:
