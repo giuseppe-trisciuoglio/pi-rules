@@ -33,8 +33,13 @@ export function ruleSources(cwd: string, configDirName: string, homeDir: string)
  * the tool-specific ones, so a rule migrated to `.pi` takes precedence over
  * its legacy copy without deleting it.
  */
+const BRAND_SCORES: Record<string, number> = {
+	".claude": 1,
+	".agents": 2,
+};
+
 function sourceScore(source: RuleSource): number {
-	const brandScore = source.brand === ".claude" ? 1 : source.brand === ".agents" ? 2 : 3;
+	const brandScore = BRAND_SCORES[source.brand] ?? 3;
 	return (source.level === "project" ? 10 : 0) + brandScore;
 }
 
@@ -52,7 +57,7 @@ function walk(dir: string): string[] {
 		if (entry.isDirectory()) out = out.concat(walk(full));
 		else if (entry.isFile() && entry.name.endsWith(".md")) out.push(full);
 	}
-	return out.sort();
+	return out.sort((a, b) => a.localeCompare(b));
 }
 
 export interface ScanResult {
