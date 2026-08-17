@@ -1,6 +1,6 @@
 {
   "name": "@giuseppe.trisciuoglio/pi-rules",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Cursor/Claude-style project rules for pi: markdown files with optional frontmatter, injected into the agent context only when relevant.",
   "keywords": [
     "pi-package",
