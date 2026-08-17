@@ -42,8 +42,9 @@ export function buildRulesSection(rules: Rule[]): string {
 	const auto = globsRules(rules);
 	const manual = onDemandRules(rules);
 	if (auto.length + manual.length > 0) {
-		parts.push("### Available rules", "");
 		parts.push(
+			"### Available rules",
+			"",
 			"Rules marked (auto: …) are injected automatically when you read or edit a matching file. Load any other rule with the `read` tool when it becomes relevant to the task.",
 			"",
 		);

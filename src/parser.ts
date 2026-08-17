@@ -61,12 +61,12 @@ export function parseFrontmatter(raw: string): {
 	body: string;
 	hasFrontmatter: boolean;
 } {
-	const match = raw.match(FRONTMATTER_RE);
+	const match = FRONTMATTER_RE.exec(raw);
 	if (!match) return { data: {}, body: raw, hasFrontmatter: false };
 
 	const data: Record<string, FrontmatterValue> = {};
 	for (const line of match[1].split(/\r?\n/)) {
-		const kv = line.match(/^([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
+		const kv = /^([A-Za-z_][\w-]*)\s*:(.*)$/.exec(line);
 		if (!kv) continue;
 		const value = kv[2].trim();
 		if (value.startsWith("[") && value.endsWith("]")) {
@@ -102,7 +102,7 @@ export function parseGlobs(value: FrontmatterValue | undefined): string[] {
  */
 function deriveDescription(body: string, name: string): string {
 	for (const line of body.split(/\r?\n/)) {
-		const heading = line.match(/^#\s+(.+?)\s*$/);
+		const heading = /^#\s+(\S.*)$/.exec(line);
 		if (heading) return heading[1].replace(/\*+/g, "").trim();
 	}
 	for (const line of body.split(/\r?\n/)) {
