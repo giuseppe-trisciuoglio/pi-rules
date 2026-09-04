@@ -26,6 +26,8 @@ Three activation channels, driven by the frontmatter:
 | **Globs** | `globs: "**/*.ts"` | When the agent reads, writes or edits a matching file, the full rule text is appended to the tool result. Once per session per rule, then never again. |
 | **On-demand** | only `description` | The rule appears in a system-prompt catalog (name + description + path); the agent loads it with the `read` tool when it judges it relevant. |
 
+A **fourth channel — navigation context** — is not frontmatter-driven: it loads plain `CLAUDE.md` / `AGENTS.md` / `RULES.md` files from the directories the agent actually visits (see below).
+
 Frontmatter is **optional but recommended**. Without it the rule still works — description is derived from the first markdown heading, and the rule becomes on-demand — but a warning is reported at scan time.
 
 ### Frontmatter fields
@@ -48,11 +50,41 @@ Six sources are scanned recursively for `.md` files:
 
 Name collisions are resolved by precedence: **project shadows user**; at the same level **`.pi` > `.agents` > `.claude`**. Every shadowed file is reported as a warning.
 
+## Navigation context (on-demand context loading)
+
+pi loads `CLAUDE.md` / `AGENTS.md` at startup only for the launch directory and its parents — deeper directories stay invisible. This extension closes that gap: as the agent navigates the project mid-session, context files of the directories it touches are loaded automatically.
+
+- **What triggers loading**: any tool activity in a directory — a bash directory change (`cd services/api && pwd`), a `read`/`write`/`edit` of a file in it, or a `grep`/`ls`/`find` over it. From that directory the extension walks upward to the launch directory, collecting context files deepest-first.
+- **Recognized file names**: exactly `CLAUDE.md`, `AGENTS.md`, `RULES.md` (a directory with several of them contributes all three, in that fixed order). Content is injected verbatim — no frontmatter parsing — capped at the first 64 KB per file.
+- **One-time per session**: each file is delivered exactly once per session, as a single durable message before the agent's next response. Revisiting an already-served directory produces no new message and no UI line. Files the host already loaded at startup are never re-delivered, and files skipped (unreadable, or symlink-resolving outside the launch directory) are recorded with their reason.
+- **Scope**: discovery never leaves the launch-directory subtree — nothing above it and nothing outside it (even via symlinks) is ever read.
+- **Compact feedback**: each delivery shows one line, e.g. `📂 loaded services/api/CLAUDE.md, CLAUDE.md`; expanding the message shows the full contents.
+
+### Usage examples
+
+```bash
+# agent navigates into a package — its context files are loaded before the next response
+cd services/api && pwd
+
+# touching a file also triggers discovery for its directory
+# (read src/server.ts → walk-up from src/ to the launch directory)
+```
+
+> **Tip**: append `&& pwd` to directory-change commands. Ambiguous forms (`cd -`, `cd ~`, `cd $VAR`, `cd $(...)`) cannot be resolved from the command string alone — the `pwd` output is what lets the extension track them. The system prompt carries this recommendation automatically while the channel is active.
+
+### Inspecting the channel
+
+- `/list-context` — session listing of loaded project context files: relative paths, tracked working directory, pre-seeded count, and skipped files with reasons. Rendered as a widget with zero conversation cost.
+- `/rules` — the report gains a **CONTEXT (navigation)** section with the same state.
+
+Navigation state resets only with the session (`/new`, `/resume`, `/fork`); `/rules reload` rescans the rule sources without touching it — already-delivered context is never re-sent.
+
 ## Commands
 
-- `/rules` — status report (rules by channel, sizes, globs, activated-this-session, warnings)
+- `/rules` — status report (rules by channel, sizes, globs, activated-this-session, warnings, navigation-context section)
 - `/rules reload` — rescan the sources without a full `/reload`
 - `/rules hide` — dismiss the report widget
+- `/list-context` — session listing of loaded navigation-context files (see above)
 - `/extract-rules [hints]` — distill codebase conventions into new rule files (see below)
 
 The index is rebuilt on session start and on `/reload`; a rescan also resets the globs activation dedup, so edited rules can be injected again.
@@ -69,8 +101,9 @@ Nothing is ever truncated silently. If always-applied rules exceed ~10KB of syst
 
 ## Known limitations
 
-- Only the `read`, `write` and `edit` tools trigger globs activation (paths in `bash` commands or patch-based tools are not matched).
+- Only the `read`, `write` and `edit` tools trigger globs activation (paths in `bash` commands or patch-based tools are not matched). The navigation-context channel is broader: it additionally observes `bash` directory changes and `grep`/`ls`/`find` search directories — but patch-based tools remain invisible to it.
 - `globs: "*"` matches only top-level files; use `**/*` to match at any depth (standard glob semantics).
+- Bash commands that change directory without a visible `pwd` (e.g. `cd $SOME_DIR` alone) cannot be tracked — append `&& pwd`.
 
 ## Install
 
@@ -88,7 +121,7 @@ pi -e /path/to/pi-rules/src/index.ts
 
 ```bash
 npm install
-npm test              # typecheck + smoke tests
+npm test              # typecheck + vitest unit tests + smoke tests
 npx tsx test/smoke-test.ts /path/to/some/project   # + live preview against a real rules dir
 ```
 
