@@ -12,17 +12,19 @@ export interface Component {
 }
 
 export class Text implements Component {
-	constructor(
-		public text: string = "",
-		_paddingX?: number,
-		_paddingY?: number,
-	) {}
+	text: string;
+
+	constructor(text: string = "", _paddingX?: number, _paddingY?: number) {
+		this.text = text;
+	}
 
 	render(_width: number): string[] {
 		return this.text.split("\n");
 	}
 
-	invalidate(): void {}
+	invalidate(): void {
+		// Rendering is a host concern; this stub has nothing to invalidate.
+	}
 
 	setText(text: string): void {
 		this.text = text;
@@ -50,7 +52,9 @@ export class Box implements Component {
 		return this.children.flatMap((child) => child.render(width));
 	}
 
-	invalidate(): void {}
+	invalidate(): void {
+		// Rendering is a host concern; this stub has nothing to invalidate.
+	}
 }
 
 export class Container implements Component {
@@ -69,5 +73,7 @@ export class Container implements Component {
 		return this.children.flatMap((child) => child.render(width));
 	}
 
-	invalidate(): void {}
+	invalidate(): void {
+		// Rendering is a host concern; this stub has nothing to invalidate.
+	}
 }

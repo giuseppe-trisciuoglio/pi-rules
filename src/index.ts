@@ -44,6 +44,7 @@ import {
 	preseedSeenFiles,
 	type ContextFile,
 	type NavigationState,
+	type SkipRecord,
 } from "./context";
 
 const PATH_TOOLS = new Set(["read", "write", "edit"]);
@@ -218,26 +219,7 @@ export default function piRules(pi: ExtensionAPI) {
 	 * is the guard against double delivery. Returns nothing — this channel
 	 * never alters the tool result.
 	 */
-	async function deliverNavigationContext(
-		event: ToolResultEvent,
-		ctx: ExtensionContext,
-	): Promise<void> {
-		if (navigation.launchDir === null) return;
-		const launchDir = navigation.launchDir;
-		const bases = {
-			launchDir,
-			trackedDir: navigation.trackedDir ?? launchDir,
-		};
-		const { touchedDir, trackedDir } = dirForToolEvent(
-			event.toolName,
-			event.input,
-			bases,
-			event.toolName === "bash" ? textContent(event.content) : "",
-		);
-		if (trackedDir !== null) navigation.trackedDir = trackedDir;
-		if (touchedDir === null) return;
-
-		const { files, skipped } = discoverContextFiles(touchedDir, launchDir);
+	function recordSkips(skipped: readonly SkipRecord[]): void {
 		// Skip Records accumulate for the session, deduped by path, so the
 		// status commands can explain why a file never arrived.
 		for (const skip of skipped) {
@@ -245,9 +227,9 @@ export default function piRules(pi: ExtensionAPI) {
 				navigation.skipped.push(skip);
 			}
 		}
-		const fresh = pickNewFiles(files, navigation.seen);
-		if (fresh.length === 0) return;
+	}
 
+	async function sendContextDelivery(fresh: readonly ContextFile[], ctx: ExtensionContext): Promise<void> {
 		for (const file of fresh) navigation.seen.add(file.canonicalPath);
 		try {
 			await pi.sendMessage({
@@ -271,6 +253,33 @@ export default function piRules(pi: ExtensionAPI) {
 				ctx.ui.notify(`pi-rules: context delivery failed (${reason}) — will retry on next navigation`, "warning");
 			}
 		}
+	}
+
+	async function deliverNavigationContext(
+		event: ToolResultEvent,
+		ctx: ExtensionContext,
+	): Promise<void> {
+		if (navigation.launchDir === null) return;
+		const launchDir = navigation.launchDir;
+		const bases = {
+			launchDir,
+			trackedDir: navigation.trackedDir ?? launchDir,
+		};
+		const { touchedDir, trackedDir } = dirForToolEvent(
+			event.toolName,
+			event.input,
+			bases,
+			event.toolName === "bash" ? textContent(event.content) : "",
+		);
+		if (trackedDir !== null) navigation.trackedDir = trackedDir;
+		if (touchedDir === null) return;
+
+		const { files, skipped } = discoverContextFiles(touchedDir, launchDir);
+		recordSkips(skipped);
+		const fresh = pickNewFiles(files, navigation.seen);
+		if (fresh.length === 0) return;
+
+		await sendContextDelivery(fresh, ctx);
 	}
 
 	// State accessor shared by both status commands.

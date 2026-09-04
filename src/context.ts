@@ -38,14 +38,14 @@ export interface CdResolutionInput {
 
 // A `cd` segment starts the command or follows a shell operator, so words that
 // merely contain the letters ("echo cd foo", "src/cd/") never match.
-const CD_SEGMENT = /(?:^|[;&|]+)\s*cd(?:\s|$)/;
+const CD_SEGMENT = /(?:^|(?:[;&|]\s*)+)cd(?:\s|$)/;
 
 // A pwd request chained onto the command; its output line is authoritative.
 const PWD_CHAIN = /(?:&&|;)\s*pwd(?:\s|$)/;
 
 // A simple `cd <literal>`: quoted ("…" / '…') or bare, stopping at whitespace
 // or the next operator.
-const SIMPLE_CD = /(?:^|[;&|]+)\s*cd\s+(?:"([^"]*)"|'([^']*)'|([^\s;&|'"]+))/;
+const SIMPLE_CD = /(?:^|(?:[;&|]\s*)+)cd\s+(?:"([^"]*)"|'([^']*)'|([^\s;&|'"]+))/;
 
 // Absolute-path-shaped line: Unix root or a Windows drive prefix.
 const ABSOLUTE_LINE = /^\s*(\/|[A-Za-z]:[\\/])/;
@@ -76,11 +76,10 @@ export function canonicalizeDir(dir: string): CanonicalDirResult {
 	const normalized = normalizeMsysPath(dir);
 	// On non-Windows hosts the msys form is not absolute after the transform;
 	// fall back to the original so a genuine `/c/...` POSIX path still works.
-	const candidate = path.isAbsolute(normalized)
-		? normalized
-		: path.isAbsolute(dir)
-			? dir
-			: null;
+	let candidate: string | null;
+	if (path.isAbsolute(normalized)) candidate = normalized;
+	else if (path.isAbsolute(dir)) candidate = dir;
+	else candidate = null;
 	if (candidate === null) return { ok: false };
 	try {
 		const real = fs.realpathSync(candidate);
@@ -268,7 +267,11 @@ function decodeUtf8Complete(buf: Buffer, length: number): string {
 	while (lead >= 0 && (buf[lead] & 0xc0) === 0x80) lead--;
 	if (lead >= 0) {
 		const b = buf[lead];
-		const seqLen = b >= 0xf0 ? 4 : b >= 0xe0 ? 3 : b >= 0xc0 ? 2 : 1;
+		let seqLen: number;
+		if (b >= 0xf0) seqLen = 4;
+		else if (b >= 0xe0) seqLen = 3;
+		else if (b >= 0xc0) seqLen = 2;
+		else seqLen = 1;
 		if (seqLen > 1 && lead + seqLen > end) end = lead;
 	}
 	return buf.subarray(0, end).toString("utf8");
@@ -311,6 +314,71 @@ function withinSubtree(dir: string, subtreeRoot: string): boolean {
  * Record is produced, as it is for any unreadable file. Discovery itself
  * never throws.
  */
+/** Result of attempting to read a single Context File candidate. */
+type ReadOutcome =
+	| { kind: "file"; file: ContextFile }
+	| { kind: "skip"; skip: SkipRecord };
+
+/** Enumerates one directory's entries as a name set; empty set on failure. */
+function readEntries(dir: string): Set<string> {
+	try {
+		return new Set(fs.readdirSync(dir));
+	} catch {
+		return new Set();
+	}
+}
+
+/**
+ * Resolves a candidate's symlink, checks subtree containment, and reads its
+ * content. Returns a file record on success and a skip record on any
+ * resolution / containment / read failure. The caller's loop body is the
+ * only place that decides which bucket the record lands in.
+ */
+function readContextFile(
+	candidate: string,
+	name: string,
+	dir: string,
+	launchRoot: string,
+	readFile: ContextFileReader,
+): ReadOutcome {
+	let canonical: string;
+	try {
+		canonical = fs.realpathSync(candidate);
+	} catch {
+		return { kind: "skip", skip: { path: candidate, reason: "unresolvable path" } };
+	}
+	if (!withinSubtree(canonical, launchRoot)) {
+		return {
+			kind: "skip",
+			skip: {
+				path: candidate,
+				reason: "symlink target outside the launch directory subtree",
+			},
+		};
+	}
+	try {
+		const content = readFile(canonical).slice(0, CONTENT_CAP);
+		return {
+			kind: "file",
+			file: {
+				name,
+				dir,
+				canonicalPath: canonical,
+				content,
+				displayPath: path.relative(launchRoot, canonical),
+			},
+		};
+	} catch (error) {
+		return {
+			kind: "skip",
+			skip: {
+				path: candidate,
+				reason: `unreadable: ${error instanceof Error ? error.message : String(error)}`,
+			},
+		};
+	}
+}
+
 export function discoverContextFiles(
 	touchedDir: string,
 	launchDir: string,
@@ -322,53 +390,20 @@ export function discoverContextFiles(
 	if (!launch.ok || !touched.ok) return result;
 	if (!withinSubtree(touched.dir, launch.dir)) return result;
 
+	const launchRoot = launch.dir;
 	let dir = touched.dir;
 	for (;;) {
 		// Enumerate entries and match names exactly: probing each candidate
 		// with existsSync would accept `claude.md` on a case-insensitive
 		// filesystem, but only the exact names are Context Files.
-		let entries: Set<string>;
-		try {
-			entries = new Set(fs.readdirSync(dir));
-		} catch {
-			entries = new Set();
-		}
+		const entries = readEntries(dir);
 		for (const name of CONTEXT_FILE_NAMES) {
 			if (!entries.has(name)) continue;
-			const candidate = path.join(dir, name);
-			// Resolve the file's own symlink before touching content: a target
-			// outside the launch subtree must never be read.
-			let canonical: string;
-			try {
-				canonical = fs.realpathSync(candidate);
-			} catch {
-				result.skipped.push({ path: candidate, reason: "unresolvable path" });
-				continue;
-			}
-			if (!withinSubtree(canonical, launch.dir)) {
-				result.skipped.push({
-					path: candidate,
-					reason: "symlink target outside the launch directory subtree",
-				});
-				continue;
-			}
-			try {
-				const content = readFile(canonical).slice(0, CONTENT_CAP);
-				result.files.push({
-					name,
-					dir,
-					canonicalPath: canonical,
-					content,
-					displayPath: path.relative(launch.dir, canonical),
-				});
-			} catch (error) {
-				result.skipped.push({
-					path: candidate,
-					reason: `unreadable: ${error instanceof Error ? error.message : String(error)}`,
-				});
-			}
+			const outcome = readContextFile(path.join(dir, name), name, dir, launchRoot, readFile);
+			if (outcome.kind === "file") result.files.push(outcome.file);
+			else result.skipped.push(outcome.skip);
 		}
-		if (dir === launch.dir) break;
+		if (dir === launchRoot) break;
 		const parent = path.dirname(dir);
 		if (parent === dir) break; // filesystem root reached before launch
 		dir = parent;
@@ -537,10 +572,8 @@ export interface PreseedResult {
  * list, a non-array value, or a list with entries but no usable path yields
  * the fallback scan of the launch tree instead.
  */
-export function preseedSeenFiles(contextFiles: unknown, launchDir: string): PreseedResult {
-	if (!Array.isArray(contextFiles)) {
-		return { paths: prescanLaunchTree(launchDir), fallback: true };
-	}
+/** Extracts the loose-shaped path strings from the host's startup list. */
+function extractRawPaths(contextFiles: readonly unknown[]): string[] {
 	const rawPaths: string[] = [];
 	for (const entry of contextFiles) {
 		if (typeof entry === "string") {
@@ -550,15 +583,28 @@ export function preseedSeenFiles(contextFiles: unknown, launchDir: string): Pres
 			if (typeof p === "string") rawPaths.push(p);
 		}
 	}
-	if (contextFiles.length > 0 && rawPaths.length === 0) {
-		return { paths: prescanLaunchTree(launchDir), fallback: true };
-	}
+	return rawPaths;
+}
+
+/** Canonicalizes a list of loose-shaped paths for the Seen Files set. */
+function canonicalizeRawPaths(rawPaths: readonly string[], launchDir: string): string[] {
 	const paths: string[] = [];
 	for (const raw of rawPaths) {
 		const canonical = canonicalizeFilePath(raw, launchDir);
 		if (canonical !== null) paths.push(canonical);
 	}
-	return { paths, fallback: false };
+	return paths;
+}
+
+export function preseedSeenFiles(contextFiles: unknown, launchDir: string): PreseedResult {
+	if (!Array.isArray(contextFiles)) {
+		return { paths: prescanLaunchTree(launchDir), fallback: true };
+	}
+	const rawPaths = extractRawPaths(contextFiles);
+	if (contextFiles.length > 0 && rawPaths.length === 0) {
+		return { paths: prescanLaunchTree(launchDir), fallback: true };
+	}
+	return { paths: canonicalizeRawPaths(rawPaths, launchDir), fallback: false };
 }
 
 /** Navigation-channel session state, owned by the extension-factory closure. */

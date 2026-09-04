@@ -33,43 +33,54 @@ function pad(text: string, width: number): string {
 	return text.length >= width ? text : text + " ".repeat(width - text.length);
 }
 
+function formatRuleRow(icon: string, rule: Rule, extra: string): string {
+	return ` ${icon} ${pad(rule.name, 30)} ${pad(formatKb(rule.sizeKb), 8)} ${extra}${rule.hasFrontmatter ? "" : "  ⚠ no frontmatter"}`;
+}
+
+function buildAlwaysSection(rules: readonly Rule[]): string[] {
+	if (rules.length === 0) return [];
+	const lines = ["ALWAYS-APPLY"];
+	for (const rule of rules) lines.push(formatRuleRow("✅", rule, rule.displayPath));
+	lines.push("");
+	return lines;
+}
+
+function buildGlobsSection(rules: readonly Rule[], activated: ReadonlySet<string>): string[] {
+	if (rules.length === 0) return [];
+	const lines = ["GLOBS (auto-activate)"];
+	for (const rule of rules) {
+		lines.push(formatRuleRow("🔗", rule, `${activated.has(rule.filePath) ? "ACTIVATED · " : ""}${rule.globs.join(", ")}`));
+	}
+	lines.push("");
+	return lines;
+}
+
+function buildOnDemandSection(rules: readonly Rule[]): string[] {
+	if (rules.length === 0) return [];
+	const lines = ["ON-DEMAND"];
+	for (const rule of rules) lines.push(formatRuleRow("📄", rule, rule.displayPath));
+	lines.push("");
+	return lines;
+}
+
+function buildWarningsSection(warnings: readonly string[]): string[] {
+	if (warnings.length === 0) return [];
+	const lines = ["WARNINGS"];
+	for (const warning of warnings) lines.push(` ⚠ ${warning}`);
+	lines.push("");
+	return lines;
+}
+
 export function buildReport(view: RulesView, nav?: NavigationView): string[] {
 	const rules = view.getRules();
 	const activated = view.getActivated();
-	const always = alwaysApplyRules(rules);
-	const auto = globsRules(rules);
-	const manual = onDemandRules(rules);
 
 	const lines: string[] = [];
 	lines.push(`pi-rules — ${rules.length} rules · ${activated.size} activated this session`, "");
-
-	const row = (icon: string, rule: Rule, extra: string): string =>
-		` ${icon} ${pad(rule.name, 30)} ${pad(formatKb(rule.sizeKb), 8)} ${extra}${rule.hasFrontmatter ? "" : "  ⚠ no frontmatter"}`;
-
-	if (always.length > 0) {
-		lines.push("ALWAYS-APPLY");
-		for (const rule of always) lines.push(row("✅", rule, rule.displayPath));
-		lines.push("");
-	}
-	if (auto.length > 0) {
-		lines.push("GLOBS (auto-activate)");
-		for (const rule of auto) {
-			lines.push(row("🔗", rule, `${activated.has(rule.filePath) ? "ACTIVATED · " : ""}${rule.globs.join(", ")}`));
-		}
-		lines.push("");
-	}
-	if (manual.length > 0) {
-		lines.push("ON-DEMAND");
-		for (const rule of manual) lines.push(row("📄", rule, rule.displayPath));
-		lines.push("");
-	}
-
-	const warnings = view.getWarnings();
-	if (warnings.length > 0) {
-		lines.push("WARNINGS");
-		for (const warning of warnings) lines.push(` ⚠ ${warning}`);
-		lines.push("");
-	}
+	lines.push(...buildAlwaysSection(alwaysApplyRules(rules)));
+	lines.push(...buildGlobsSection(globsRules(rules), activated));
+	lines.push(...buildOnDemandSection(onDemandRules(rules)));
+	lines.push(...buildWarningsSection(view.getWarnings()));
 
 	if (nav !== undefined) {
 		lines.push(...buildContextSection(nav.getNavigationState()));
@@ -90,7 +101,7 @@ export function buildContextSection(nav: NavigationState): string[] {
 		` loaded: ${nav.delivered.length} · pre-seeded: ${nav.preseedCount} · skipped: ${nav.skipped.length}`,
 	);
 	lines.push(` tracked dir: ${nav.trackedDir ?? "(unset)"}`);
-	for (const skip of nav.skipped) lines.push(` ⚠ ${skip.path} — ${skip.reason}`);
+	lines.push(...nav.skipped.map((skip) => ` ⚠ ${skip.path} — ${skip.reason}`));
 	return lines;
 }
 

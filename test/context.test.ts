@@ -465,7 +465,7 @@ describe("pickNewFiles", () => {
 		// Input set and array untouched by the selection.
 		expect(seen.size).toBe(2);
 		expect(picked).not.toBe(files);
-		expect(files.length).toBe(5);
+		expect(files).toHaveLength(5);
 	});
 
 	it("returns everything when nothing has been seen", () => {
