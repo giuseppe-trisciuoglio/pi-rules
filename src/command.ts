@@ -77,10 +77,12 @@ export function buildReport(view: RulesView, nav?: NavigationView): string[] {
 
 	const lines: string[] = [];
 	lines.push(`pi-rules — ${rules.length} rules · ${activated.size} activated this session`, "");
-	lines.push(...buildAlwaysSection(alwaysApplyRules(rules)));
-	lines.push(...buildGlobsSection(globsRules(rules), activated));
-	lines.push(...buildOnDemandSection(onDemandRules(rules)));
-	lines.push(...buildWarningsSection(view.getWarnings()));
+	lines.push(
+		...buildAlwaysSection(alwaysApplyRules(rules)),
+		...buildGlobsSection(globsRules(rules), activated),
+		...buildOnDemandSection(onDemandRules(rules)),
+		...buildWarningsSection(view.getWarnings()),
+	);
 
 	if (nav !== undefined) {
 		lines.push(...buildContextSection(nav.getNavigationState()));
@@ -100,8 +102,10 @@ export function buildContextSection(nav: NavigationState): string[] {
 	lines.push(
 		` loaded: ${nav.delivered.length} · pre-seeded: ${nav.preseedCount} · skipped: ${nav.skipped.length}`,
 	);
-	lines.push(` tracked dir: ${nav.trackedDir ?? "(unset)"}`);
-	lines.push(...nav.skipped.map((skip) => ` ⚠ ${skip.path} — ${skip.reason}`));
+	lines.push(
+		` tracked dir: ${nav.trackedDir ?? "(unset)"}`,
+		...nav.skipped.map((skip) => ` ⚠ ${skip.path} — ${skip.reason}`),
+	);
 	return lines;
 }
 

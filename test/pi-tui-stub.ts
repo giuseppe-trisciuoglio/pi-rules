@@ -32,11 +32,6 @@ export class Text implements Component {
 }
 
 export class Box implements Component {
-	constructor(
-		_paddingX?: number,
-		_paddingY?: number,
-	) {}
-
 	children: Component[] = [];
 
 	addChild(child: Component): void {

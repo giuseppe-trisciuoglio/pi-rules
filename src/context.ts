@@ -37,15 +37,18 @@ export interface CdResolutionInput {
 }
 
 // A `cd` segment starts the command or follows a shell operator, so words that
-// merely contain the letters ("echo cd foo", "src/cd/") never match.
-const CD_SEGMENT = /(?:^|(?:[;&|]\s*)+)cd(?:\s|$)/;
+// merely contain the letters ("echo cd foo", "src/cd/") never match. The
+// prefix groups operator and whitespace into non-overlapping alternatives
+// (`[;&|]` vs `\s+`) so the outer repetition has no ambiguity and backtracks
+// linearly.
+const CD_SEGMENT = /(?:^|[;&|](?:[;&|]|\s+)*\s*)cd(?:\s|$)/;
 
 // A pwd request chained onto the command; its output line is authoritative.
 const PWD_CHAIN = /(?:&&|;)\s*pwd(?:\s|$)/;
 
 // A simple `cd <literal>`: quoted ("…" / '…') or bare, stopping at whitespace
-// or the next operator.
-const SIMPLE_CD = /(?:^|(?:[;&|]\s*)+)cd\s+(?:"([^"]*)"|'([^']*)'|([^\s;&|'"]+))/;
+// or the next operator. Same non-ambiguous prefix as CD_SEGMENT.
+const SIMPLE_CD = /(?:^|[;&|](?:[;&|]|\s+)*\s*)cd\s+(?:"([^"]*)"|'([^']*)'|([^\s;&|'"]+))/;
 
 // Absolute-path-shaped line: Unix root or a Windows drive prefix.
 const ABSOLUTE_LINE = /^\s*(\/|[A-Za-z]:[\\/])/;
@@ -387,8 +390,7 @@ export function discoverContextFiles(
 	const result: DiscoveryResult = { files: [], skipped: [] };
 	const launch = canonicalizeDir(launchDir);
 	const touched = canonicalizeDir(touchedDir);
-	if (!launch.ok || !touched.ok) return result;
-	if (!withinSubtree(touched.dir, launch.dir)) return result;
+	if (!launch.ok || !touched.ok || !withinSubtree(touched.dir, launch.dir)) return result;
 
 	const launchRoot = launch.dir;
 	let dir = touched.dir;
@@ -473,11 +475,11 @@ export function deriveSeenFromRecords(entries: readonly unknown[]): Set<string> 
 	for (const entry of entries) {
 		if (typeof entry !== "object" || entry === null) continue;
 		const record = entry as Record<string, unknown>;
-		if (record.type !== "custom_message") continue;
-		if (record.customType !== CONTEXT_MESSAGE_TYPE) continue;
-		const details = record.details;
-		if (typeof details !== "object" || details === null) continue;
-		const files = (details as Record<string, unknown>).files;
+		if (record.type !== "custom_message" || record.customType !== CONTEXT_MESSAGE_TYPE) continue;
+		const files =
+			typeof record.details === "object" && record.details !== null
+				? (record.details as Record<string, unknown>).files
+				: undefined;
 		if (!Array.isArray(files)) continue;
 		for (const file of files) {
 			if (typeof file === "string" && file !== "") seen.add(file);
