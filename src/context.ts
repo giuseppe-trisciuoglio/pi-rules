@@ -38,17 +38,16 @@ export interface CdResolutionInput {
 
 // A `cd` segment starts the command or follows a shell operator, so words that
 // merely contain the letters ("echo cd foo", "src/cd/") never match. The
-// prefix groups operator and whitespace into non-overlapping alternatives
-// (`[;&|]` vs `\s+`) so the outer repetition has no ambiguity and backtracks
-// linearly.
-const CD_SEGMENT = /(?:^|[;&|](?:[;&|]|\s+)*\s*)cd(?:\s|$)/;
+// prefix is a flat character class after the operator, with no nested
+// repetition to backtrack over.
+const CD_SEGMENT = /(?:^|[;&|][;&|\s]*)cd(?:\s|$)/;
 
 // A pwd request chained onto the command; its output line is authoritative.
 const PWD_CHAIN = /(?:&&|;)\s*pwd(?:\s|$)/;
 
 // A simple `cd <literal>`: quoted ("…" / '…') or bare, stopping at whitespace
-// or the next operator. Same non-ambiguous prefix as CD_SEGMENT.
-const SIMPLE_CD = /(?:^|[;&|](?:[;&|]|\s+)*\s*)cd\s+(?:"([^"]*)"|'([^']*)'|([^\s;&|'"]+))/;
+// or the next operator. Same flat prefix as CD_SEGMENT.
+const SIMPLE_CD = /(?:^|[;&|][;&|\s]*)cd\s+(?:"([^"]*)"|'([^']*)'|([^\s;&|'"]+))/;
 
 // Absolute-path-shaped line: Unix root or a Windows drive prefix.
 const ABSOLUTE_LINE = /^\s*(\/|[A-Za-z]:[\\/])/;
@@ -464,6 +463,20 @@ export function formatDeliveryLine(paths: readonly string[]): string {
 /** Custom message type marking a context delivery in session history. */
 export const CONTEXT_MESSAGE_TYPE = "pi-rules-context";
 
+/** True when an entry is a delivery record of this channel. */
+function isContextDeliveryRecord(entry: unknown): entry is Record<string, unknown> {
+	if (typeof entry !== "object" || entry === null) return false;
+	const record = entry as Record<string, unknown>;
+	return record.type === "custom_message" && record.customType === CONTEXT_MESSAGE_TYPE;
+}
+
+/** The file strings carried by a delivery record's details, or null. */
+function deliveryFiles(record: Record<string, unknown>): readonly unknown[] | null {
+	if (typeof record.details !== "object" || record.details === null) return null;
+	const files = (record.details as Record<string, unknown>).files;
+	return Array.isArray(files) ? files : null;
+}
+
 /**
  * Re-derives the Seen Files set from prior delivery records found in session
  * history. Anything that is not a delivery record of this channel, or whose
@@ -473,14 +486,9 @@ export const CONTEXT_MESSAGE_TYPE = "pi-rules-context";
 export function deriveSeenFromRecords(entries: readonly unknown[]): Set<string> {
 	const seen = new Set<string>();
 	for (const entry of entries) {
-		if (typeof entry !== "object" || entry === null) continue;
-		const record = entry as Record<string, unknown>;
-		if (record.type !== "custom_message" || record.customType !== CONTEXT_MESSAGE_TYPE) continue;
-		const files =
-			typeof record.details === "object" && record.details !== null
-				? (record.details as Record<string, unknown>).files
-				: undefined;
-		if (!Array.isArray(files)) continue;
+		if (!isContextDeliveryRecord(entry)) continue;
+		const files = deliveryFiles(entry);
+		if (files === null) continue;
 		for (const file of files) {
 			if (typeof file === "string" && file !== "") seen.add(file);
 		}
@@ -500,11 +508,8 @@ export function deriveDeliveredFromRecords(
 ): string[] {
 	const delivered: string[] = [];
 	for (const entry of entries) {
-		if (typeof entry !== "object" || entry === null) continue;
-		const record = entry as Record<string, unknown>;
-		if (record.type !== "custom_message") continue;
-		if (record.customType !== CONTEXT_MESSAGE_TYPE) continue;
-		delivered.push(...deliveryDisplayPaths(record.details, launchDir));
+		if (!isContextDeliveryRecord(entry)) continue;
+		delivered.push(...deliveryDisplayPaths(entry.details, launchDir));
 	}
 	return delivered;
 }

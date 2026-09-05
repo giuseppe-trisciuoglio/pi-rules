@@ -76,8 +76,9 @@ export function buildReport(view: RulesView, nav?: NavigationView): string[] {
 	const activated = view.getActivated();
 
 	const lines: string[] = [];
-	lines.push(`pi-rules — ${rules.length} rules · ${activated.size} activated this session`, "");
 	lines.push(
+		`pi-rules — ${rules.length} rules · ${activated.size} activated this session`,
+		"",
 		...buildAlwaysSection(alwaysApplyRules(rules)),
 		...buildGlobsSection(globsRules(rules), activated),
 		...buildOnDemandSection(onDemandRules(rules)),
@@ -101,8 +102,6 @@ export function buildContextSection(nav: NavigationState): string[] {
 	const lines = ["CONTEXT (navigation)"];
 	lines.push(
 		` loaded: ${nav.delivered.length} · pre-seeded: ${nav.preseedCount} · skipped: ${nav.skipped.length}`,
-	);
-	lines.push(
 		` tracked dir: ${nav.trackedDir ?? "(unset)"}`,
 		...nav.skipped.map((skip) => ` ⚠ ${skip.path} — ${skip.reason}`),
 	);
