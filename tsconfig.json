@@ -9,6 +9,12 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@earendil-works/pi-tui": [
+        "./test/pi-tui-stub.ts"
+      ]
+    },
     "noEmit": true
   },
   "include": [
