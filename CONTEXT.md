@@ -25,7 +25,7 @@ One of the six directories scanned for Rules: `.claude/rules`, `.agents/rules`, 
 _Avoid_: rules folder, origin
 
 **Activation**:
-The one-time injection of a Globs Rule's full content into a tool result when the agent touches a matching file. Happens at most once per session per Rule; resets on rescan.
+The one-time injection of a Globs Rule's full content into a tool result when the agent touches a matching file. Happens at most once per session per Rule; resets on rescan or `session_before_compact` (so already-fired rules can re-fire once after the conversation has been folded into a compaction summary).
 _Avoid_: trigger, firing
 
 **Rule Extraction**:
