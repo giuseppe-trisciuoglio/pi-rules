@@ -686,6 +686,14 @@ describe("tool_result wiring (simulated events + captured sender)", () => {
 			abs("wiring", ".pi", "rules", "ts-rule.md"),
 			"---\ndescription: TypeScript rule\nglobs: [\"**/*.ts\"]\n---\nTS rule body.\n",
 		);
+		fs.writeFileSync(
+			abs("wiring", ".pi", "rules", "always-rule.md"),
+			"---\nalwaysApply: true\ndescription: Always rule\n---\nAlways body.\n",
+		);
+		fs.writeFileSync(
+			abs("wiring", ".pi", "rules", "ondemand-rule.md"),
+			"---\ndescription: On-demand rule\n---\nOn-demand body.\n",
+		);
 		fs.symlinkSync(abs("wiring", "gone-target"), abs("wiring", "broken", "AGENTS.md"));
 	});
 
@@ -773,6 +781,8 @@ describe("tool_result wiring (simulated events + captured sender)", () => {
 			widgets,
 			getRendererRegistrations: () => rendererRegistrations,
 			sessionStart: () => handlers.get("session_start")!({ reason: "startup" }, ctx),
+			beforeCompact: (event: unknown = { reason: "manual", willRetry: false }) =>
+				handlers.get("session_before_compact")!(event, ctx),
 			setSendBehavior: (fn: () => unknown) => {
 				sendBehavior = fn;
 			},
@@ -1046,5 +1056,145 @@ describe("tool_result wiring (simulated events + captured sender)", () => {
 		// and the skip records survived the reload.
 		await w.toolResult(bashEvent("cd broken && pwd", `${target}\n`));
 		expect(w.sent).toHaveLength(1);
+	});
+
+	describe("session_before_compact re-arms Globs dedup (issue #6)", () => {
+		const fooPath = () => abs("wiring", "pkg", "foo.ts");
+		const readFoo = () => ({
+			type: "tool_result",
+			toolName: "read",
+			input: { path: fooPath() },
+			content: [{ type: "text", text: "export {};" }],
+			isError: false,
+		});
+
+		it("registers a session_before_compact handler that returns nothing (AC-7)", () => {
+			const w = makeWiring(wiring);
+			// The handler is callable through the harness and returns `undefined`.
+			const result = w.beforeCompact({ reason: "manual", willRetry: false });
+			expect(result).toBeUndefined();
+			// Sanity: re-trigger session_start doesn't break anything.
+			w.sessionStart();
+		});
+
+		it("re-arms a previously-fired Globs Rule: next matching read re-appends the body (AC-1)", async () => {
+			const w = makeWiring(wiring);
+
+			// First touch: the rule fires, body is appended, the rule is marked
+			// activated. The activation notification is also raised.
+			const first = await w.toolResult(readFoo());
+			expect(first).toBeDefined();
+			expect(first!.content.some((b) => b.text?.includes("Project rule activated: **ts-rule**"))).toBe(true);
+			expect(w.notifications.some((n) => n.message.includes("Rule activated: ts-rule"))).toBe(true);
+
+			// Second touch without compaction: dedup holds — no body appended.
+			const second = await w.toolResult(readFoo());
+			expect(second).toBeUndefined();
+			expect(w.notifications.filter((n) => n.message.includes("Rule activated: ts-rule"))).toHaveLength(1);
+
+			// Simulate compaction: activated is cleared, navigation-context
+			// state is untouched.
+			const navSizeBefore = w.sent.length;
+			w.beforeCompact();
+
+			// Third touch: the rule re-fires (AC-1), exactly one more
+			// activation notification is raised.
+			const third = await w.toolResult(readFoo());
+			expect(third).toBeDefined();
+			expect(third!.content.some((b) => b.text?.includes("Project rule activated: **ts-rule**"))).toBe(true);
+			expect(w.notifications.filter((n) => n.message.includes("Rule activated: ts-rule"))).toHaveLength(2);
+
+			// The navigation channel did not produce any extra send as a
+			// side-effect of the compaction handler.
+			expect(w.sent).toHaveLength(navSizeBefore);
+		});
+
+		it("does not touch the Always-Apply or On-Demand prompt sections (AC-2, AC-3)", () => {
+			const w = makeWiring(wiring);
+			// Render /rules before compaction: a snapshot of the catalog.
+			void w.command("rules");
+			const before = w.widgets.get("pi-rules")!.join("\n");
+			expect(before).toContain("ALWAYS-APPLY");
+			expect(before).toContain("ON-DEMAND");
+			expect(before).toContain("0 activated this session");
+
+			w.beforeCompact();
+			void w.command("rules");
+			const after = w.widgets.get("pi-rules")!.join("\n");
+			// Bodies and catalog entries are identical — only the activation
+			// counter changes.
+			expect(after).toBe(before);
+		});
+
+		it("does not touch the navigation-context seen Set (AC-4, AC-6)", async () => {
+			const w = makeWiring(wiring);
+			const target = abs("wiring", "services", "api");
+			await w.toolResult(bashEvent("cd services/api && pwd", `${target}\n`));
+			expect(w.sent).toHaveLength(1);
+
+			w.beforeCompact();
+
+			// Re-touching the same directory: still no new send. The seen
+			// Set survived compaction.
+			await w.toolResult(bashEvent("cd services/api && pwd", `${target}\n`));
+			expect(w.sent).toHaveLength(1);
+
+			// /list-context is unaffected by compaction (AC-6).
+			await w.command("list-context");
+			const text = w.widgets.get("pi-rules")!.join("\n");
+			expect(text).toContain("2 loaded");
+			expect(text).toContain("tracked dir: " + target);
+		});
+
+		it("/rules activated-this-session counter reflects post-compaction activations only (AC-5)", async () => {
+			const w = makeWiring(wiring);
+
+			// Fire the rule once, then render the report — counter is 1.
+			await w.toolResult(readFoo());
+			void w.command("rules");
+			expect(w.widgets.get("pi-rules")!.join("\n")).toContain("1 activated this session");
+
+			// Compaction resets the counter.
+			w.beforeCompact();
+			void w.command("rules");
+			expect(w.widgets.get("pi-rules")!.join("\n")).toContain("0 activated this session");
+
+			// Post-compaction firing raises the counter again.
+			await w.toolResult(readFoo());
+			void w.command("rules");
+			expect(w.widgets.get("pi-rules")!.join("\n")).toContain("1 activated this session");
+		});
+
+		it("fires regardless of reason (manual / threshold / overflow) and willRetry (no reason filter)", async () => {
+			for (const event of [
+				{ reason: "manual", willRetry: false },
+				{ reason: "threshold", willRetry: false },
+				{ reason: "overflow", willRetry: true },
+				{ reason: "overflow", willRetry: false },
+			]) {
+				const w = makeWiring(wiring);
+				await w.toolResult(readFoo()); // prime the dedup
+				w.beforeCompact(event);
+				const result = await w.toolResult(readFoo()); // must re-fire
+				expect(result).toBeDefined();
+				expect(result!.content.some((b) => b.text?.includes("Project rule activated: **ts-rule**"))).toBe(true);
+			}
+		});
+
+		it("survives /rules reload — rescan clears activated, then compaction clears it again (AC-7)", async () => {
+			const w = makeWiring(wiring);
+			await w.toolResult(readFoo()); // activated = {ts-rule}
+			void w.command("rules");
+			expect(w.widgets.get("pi-rules")!.join("\n")).toContain("1 activated this session");
+
+			await w.command("rules", "reload"); // rescan resets activated
+			void w.command("rules");
+			expect(w.widgets.get("pi-rules")!.join("\n")).toContain("0 activated this session");
+
+			await w.toolResult(readFoo()); // activated = {ts-rule} again
+			w.beforeCompact(); // compaction clears it once more
+			void w.command("rules");
+			expect(w.widgets.get("pi-rules")!.join("\n")).toContain("0 activated this session");
+		});
 	});
 });

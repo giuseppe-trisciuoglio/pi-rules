@@ -144,6 +144,16 @@ export default function piRules(pi: ExtensionAPI) {
 		navigation = initNavigationState(ctx.cwd, history);
 	});
 
+	// Re-arm the Globs dedup gate so already-fired rules can fire again after
+	// the conversation has been folded into a compaction summary. The handler
+	// is synchronous and returns no value: by the time the host invokes the
+	// LLM to produce the summary, the next matching tool call sees an empty
+	// Set and re-injects the rule body. Rules and the navigation-context
+	// channel are intentionally untouched — only `activated` resets.
+	pi.on("session_before_compact", () => {
+		activated = new Set<string>();
+	});
+
 	pi.on("before_agent_start", (event, ctx) => {
 		// Lazy pre-seed: the host's startup context files are only visible on
 		// this event, and they must be seen before any delivery can occur.
