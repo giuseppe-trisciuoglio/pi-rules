@@ -127,6 +127,8 @@ npx tsx test/smoke-test.ts /path/to/some/project   # + live preview against a re
 
 No build step: pi loads TypeScript extensions directly.
 
+Dependency-update PRs (npm packages + GitHub Actions) are produced by [Dependabot](https://docs.github.com/en/code-security/dependabot) on a weekly Monday schedule, configured in [`.github/dependabot.yml`](./.github/dependabot.yml). Dependency bumps are grouped to keep PR noise low and labelled `dependencies` + `enhancement`.
+
 ## License
 
 MIT — see [LICENSE](./LICENSE).
