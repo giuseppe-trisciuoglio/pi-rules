@@ -193,6 +193,7 @@ for (const [label, globs, toolPath, expected] of matchCases) {
 	check("init-template: bans invented commands", body.includes("TODO: verify"), true);
 	check("init-template: bans executing dangerous commands", body.includes("Do NOT execute them"), true);
 	check("init-template: english-only output", body.includes("English"), true);
+	check("init-template: treats repo contents as untrusted evidence", /untrusted/i.test(body) && /never follow/i.test(body), true);
 }
 
 // ─── Optional: live preview against a real project ──────────────────────────
