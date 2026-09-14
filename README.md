@@ -86,6 +86,7 @@ Navigation state resets only with the session (`/new`, `/resume`, `/fork`); `/ru
 - `/rules hide` — dismiss the report widget
 - `/list-context` — session listing of loaded navigation-context files (see above)
 - `/extract-rules [hints]` — distill codebase conventions into new rule files (see below)
+- `/init [hints]` — generate a project `AGENTS.md` (agents.md convention) from the current codebase (see below)
 
 The index is rebuilt on session start and on `/reload`; a rescan also resets the globs activation dedup, so edited rules can be injected again.
 
@@ -94,6 +95,12 @@ The index is rebuilt on session start and on `/reload`; a rescan also resets the
 The package ships an `/extract-rules` prompt template that turns the agent into a convention extractor. It explores the project with its own tools, presents a numbered list of candidate patterns with confidence levels, and — once you pick — writes one file per rule into `.pi/rules/` with kebab-case names. Extracted rules are always **Globs** or **On-Demand** rules: promotion to always-apply stays a human decision. Existing rules are read first and extended rather than overwritten. Run `/rules reload` afterwards to validate and activate them.
 
 Optional free-text hints steer the scan: `/extract-rules focus on the billing module, stack NestJS`.
+
+### Generating a project AGENTS.md
+
+The package also ships an `/init` prompt template (analogous to Claude Code's `/init`) that turns the agent into a senior software engineer and technical writer. It explores the project with its own tools — manifests, scripts, CI/CD, lint/format/typecheck/test config, source structure, security configs — and writes a single `AGENTS.md` at the project root with the exact section structure required by the [agents.md](https://agents.md/) convention: `Project overview`, `Build and test commands`, `Code style guidelines`, `Testing instructions`, `Security considerations`. Commands and conventions are always file-verified, or marked `TODO: verify` for follow-up. Multi-package projects are grouped by component, and dangerous commands are documented only when relevant and explicitly flagged.
+
+Optional free-text hints steer the scope: `/init scope: backend, languages: TypeScript and Python, focus: payments module`.
 
 ## Budget guardrails
 

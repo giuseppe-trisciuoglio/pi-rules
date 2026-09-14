@@ -179,6 +179,22 @@ for (const [label, globs, toolPath, expected] of matchCases) {
 	check("template: two-phase flow", body.includes("Phase 1") && body.includes("Phase 2"), true);
 }
 
+// ─── Package prompt template: /init ─────────────────────────────────────────
+
+{
+	const templatePath = fileURLToPath(new URL("../prompts/init.md", import.meta.url));
+	const raw = fs.readFileSync(templatePath, "utf8");
+	const { data, body, hasFrontmatter } = parseFrontmatter(raw);
+	check("init-template: frontmatter detected", hasFrontmatter, true);
+	check("init-template: description present", typeof data.description === "string" && data.description.length > 0, true);
+	check("init-template: free-text arguments", body.includes("${ARGUMENTS"), true);
+	check("init-template: requires exploration", body.includes("Required exploration") && body.includes("CI/CD"), true);
+	check("init-template: exact section headings", body.includes("## Project overview") && body.includes("## Build and test commands") && body.includes("## Code style guidelines") && body.includes("## Testing instructions") && body.includes("## Security considerations"), true);
+	check("init-template: bans invented commands", body.includes("TODO: verify"), true);
+	check("init-template: bans executing dangerous commands", body.includes("Do NOT execute them"), true);
+	check("init-template: english-only output", body.includes("English"), true);
+}
+
 // ─── Optional: live preview against a real project ──────────────────────────
 
 const liveDir = process.argv[2];

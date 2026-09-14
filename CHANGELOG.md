@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `/init` slash command (prompt template in `prompts/init.md`): systematically explores the current codebase and generates a project `AGENTS.md` at the project root following the [agents.md](https://agents.md/) convention. Commands and conventions are always file-verified or marked `TODO: verify`; multi-package projects are grouped by component; dangerous commands are documented only when relevant and explicitly flagged; output is English-only with exact section headings (`Project overview`, `Build and test commands`, `Code style guidelines`, `Testing instructions`, `Security considerations`). Smoke-test coverage added in `test/smoke-test.ts`.
+
 ## [1.2.0] - 2026-09-12
 
 ### Added
