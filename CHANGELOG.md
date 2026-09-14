@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `/init` slash command (prompt template in `prompts/init.md`): systematically explores the current codebase and generates a project `AGENTS.md` at the project root following the [agents.md](https://agents.md/) convention. Commands and conventions are always file-verified or marked `TODO: verify`; multi-package projects are grouped by component; dangerous commands are documented only when relevant and explicitly flagged; output is English-only with exact section headings (`Project overview`, `Build and test commands`, `Code style guidelines`, `Testing instructions`, `Security considerations`). Smoke-test coverage added in `test/smoke-test.ts`.
+
+## [1.2.0] - 2026-09-12
+
+### Added
+
 - Navigation-context channel (fourth activation channel): plain `CLAUDE.md` / `AGENTS.md` / `RULES.md` files discovered by walking up from each directory the agent touches (bash `cd`, `read`/`write`/`edit` file paths, `grep`/`ls`/`find` search dirs) to the launch directory are delivered verbatim (64 KB per-file cap) as a single durable message, exactly once per session per file. Discovery is hard-bounded to the launch-directory subtree, including through symlinks; skipped files (unreadable / out-of-subtree) are recorded with their reason.
 - `/list-context` command: session listing of loaded context files (relative paths, tracked working directory, pre-seeded count, skipped files with reasons), rendered as a widget with zero conversation cost.
 - `/rules` report gains a CONTEXT (navigation) section; compact delivery feedback line (`📂 loaded <paths>`) with expandable full contents via a registered message renderer.
