@@ -52,23 +52,7 @@ export class Box implements Component {
 	}
 }
 
-export class Container implements Component {
-	children: Component[] = [];
-
-	addChild(child: Component): void {
-		this.children.push(child);
-	}
-
-	removeChild(child: Component): void {
-		const index = this.children.indexOf(child);
-		if (index >= 0) this.children.splice(index, 1);
-	}
-
-	render(width: number): string[] {
-		return this.children.flatMap((child) => child.render(width));
-	}
-
-	invalidate(): void {
-		// Rendering is a host concern; this stub has nothing to invalidate.
-	}
-}
+// Identical shape to Box — declared as an alias to avoid two identical class
+// bodies in this stub. Tests never exercise real layout; the host provides
+// the runtime classes at extension load.
+export class Container extends Box {}

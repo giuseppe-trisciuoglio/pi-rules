@@ -797,6 +797,28 @@ describe("tool_result wiring (simulated events + captured sender)", () => {
 		isError: false,
 	});
 
+	// Shared read event for the wiring fixture: the file is covered by the
+	// globs rule, and its directory carries a context file. Reused by the
+	// rule-context combo tests and by the compaction dedup suite below.
+	const readFoo = () => ({
+		type: "tool_result",
+		toolName: "read",
+		input: { path: abs("wiring", "pkg", "foo.ts") },
+		content: [{ type: "text", text: "export {};" }],
+		isError: false,
+	});
+
+	// Touch the wiring/broken directory: wiring/broken/AGENTS.md is a broken
+	// symlink (records a skip) while wiring/CLAUDE.md is delivered. Returns
+	// the wiring harness plus the tracked target dir for follow-up assertions.
+	async function visitBroken() {
+		const w = makeWiring(wiring);
+		const target = abs("wiring", "broken");
+		await w.toolResult(bashEvent("cd broken && pwd", `${target}\n`));
+		expect(w.sent).toHaveLength(1);
+		return { w, target };
+	}
+
 	it("`cd <dir> && pwd` with unseen context files sends exactly one combined message, marked seen (AC-001, AC-012)", async () => {
 		const w = makeWiring(wiring);
 		const target = abs("wiring", "services", "api");
@@ -826,13 +848,7 @@ describe("tool_result wiring (simulated events + captured sender)", () => {
 
 	it("read on a file matching a globs rule delivers rule block AND one context send (AC-021)", async () => {
 		const w = makeWiring(wiring);
-		const result = await w.toolResult({
-			type: "tool_result",
-			toolName: "read",
-			input: { path: abs("wiring", "pkg", "foo.ts") },
-			content: [{ type: "text", text: "export {};" }],
-			isError: false,
-		});
+		const result = await w.toolResult(readFoo());
 
 		// Channel 1: rule block appended to the returned tool result.
 		expect(result).toBeDefined();
@@ -933,13 +949,7 @@ describe("tool_result wiring (simulated events + captured sender)", () => {
 
 		// Now the read fires the globs rule but the context channel must stay
 		// silent — and the rule block must still be returned.
-		const result = await w.toolResult({
-			type: "tool_result",
-			toolName: "read",
-			input: { path: abs("wiring", "pkg", "foo.ts") },
-			content: [{ type: "text", text: "export {};" }],
-			isError: false,
-		});
+		const result = await w.toolResult(readFoo());
 		expect(result).toBeDefined();
 		const last = result!.content[result!.content.length - 1];
 		expect(last.text).toContain("Project rule activated: **ts-rule**");
@@ -990,14 +1000,10 @@ describe("tool_result wiring (simulated events + captured sender)", () => {
 	});
 
 	it("/list-context lists loaded files, tracked dir, pre-seed count and skips — widget only (AC-016, AC-022)", async () => {
-		const w = makeWiring(wiring);
-		const target = abs("wiring", "broken");
-		await w.toolResult(bashEvent("cd broken && pwd", `${target}\n`));
+		const { w, target } = await visitBroken();
 		// broken/AGENTS.md is a broken symlink (skipped); wiring/CLAUDE.md was
 		// delivered. The conversation carries the delivery message; the
 		// command itself must add nothing to it.
-		expect(w.sent).toHaveLength(1);
-
 		await w.command("list-context");
 		expect(w.sent).toHaveLength(1); // zero conversation cost
 		const lines = w.widgets.get("pi-rules");
@@ -1023,9 +1029,7 @@ describe("tool_result wiring (simulated events + captured sender)", () => {
 	});
 
 	it("/rules report gains a context section with counts, tracked dir and skip reasons (AC-017, AC-022)", async () => {
-		const w = makeWiring(wiring);
-		const target = abs("wiring", "broken");
-		await w.toolResult(bashEvent("cd broken && pwd", `${target}\n`));
+		const { w, target } = await visitBroken();
 
 		await w.command("rules");
 		const text = w.widgets.get("pi-rules")!.join("\n");
@@ -1038,10 +1042,7 @@ describe("tool_result wiring (simulated events + captured sender)", () => {
 	});
 
 	it("/rules reload rescans rules only — navigation state is left untouched (F1)", async () => {
-		const w = makeWiring(wiring);
-		const target = abs("wiring", "broken");
-		await w.toolResult(bashEvent("cd broken && pwd", `${target}\n`));
-		expect(w.sent).toHaveLength(1);
+		const { w, target } = await visitBroken();
 
 		await w.command("rules", "reload");
 		// No widget rendered by reload; the navigation state must be intact.
@@ -1059,14 +1060,19 @@ describe("tool_result wiring (simulated events + captured sender)", () => {
 	});
 
 	describe("session_before_compact re-arms Globs dedup (issue #6)", () => {
-		const fooPath = () => abs("wiring", "pkg", "foo.ts");
-		const readFoo = () => ({
-			type: "tool_result",
-			toolName: "read",
-			input: { path: fooPath() },
-			content: [{ type: "text", text: "export {};" }],
-			isError: false,
-		});
+		// readFoo is shared with the surrounding suite — see its definition
+		// next to bashEvent above.
+
+		// Fire the rule once, render the report, and verify the activated
+		// counter is 1. Used as the common starting point of the AC-5 and
+		// AC-7 cases that probe the counter after a reset.
+		async function fireAndAssertOneActivation() {
+			const w = makeWiring(wiring);
+			await w.toolResult(readFoo());
+			void w.command("rules");
+			expect(w.widgets.get("pi-rules")!.join("\n")).toContain("1 activated this session");
+			return w;
+		}
 
 		it("registers a session_before_compact handler that returns nothing (AC-7)", () => {
 			const w = makeWiring(wiring);
@@ -1147,12 +1153,7 @@ describe("tool_result wiring (simulated events + captured sender)", () => {
 		});
 
 		it("/rules activated-this-session counter reflects post-compaction activations only (AC-5)", async () => {
-			const w = makeWiring(wiring);
-
-			// Fire the rule once, then render the report — counter is 1.
-			await w.toolResult(readFoo());
-			void w.command("rules");
-			expect(w.widgets.get("pi-rules")!.join("\n")).toContain("1 activated this session");
+			const w = await fireAndAssertOneActivation();
 
 			// Compaction resets the counter.
 			w.beforeCompact();
@@ -1182,10 +1183,7 @@ describe("tool_result wiring (simulated events + captured sender)", () => {
 		});
 
 		it("survives /rules reload — rescan clears activated, then compaction clears it again (AC-7)", async () => {
-			const w = makeWiring(wiring);
-			await w.toolResult(readFoo()); // activated = {ts-rule}
-			void w.command("rules");
-			expect(w.widgets.get("pi-rules")!.join("\n")).toContain("1 activated this session");
+			const w = await fireAndAssertOneActivation();
 
 			await w.command("rules", "reload"); // rescan resets activated
 			void w.command("rules");
