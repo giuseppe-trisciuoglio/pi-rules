@@ -46,6 +46,12 @@ import {
 	type NavigationState,
 	type SkipRecord,
 } from "./context";
+import {
+	buildProjectContextSection,
+	discoverProjectContext,
+	rootContextFilePath,
+	type ProjectContextState,
+} from "./projectContext";
 
 const PATH_TOOLS = new Set(["read", "write", "edit"]);
 
@@ -78,6 +84,7 @@ export default function piRules(pi: ExtensionAPI) {
 	// fresh instance (rebuilt on every session start) is the reset — there is
 	// deliberately no explicit clear path.
 	let navigation: NavigationState = initNavigationState("", []);
+	let projectContext: ProjectContextState = { root: null, files: [], graph: null, graphStale: false, warnings: [] };
 
 	// Compact renderer for context deliveries: one line listing the loaded
 	// paths, full file contents on expansion. Registered once per extension
@@ -121,6 +128,9 @@ export default function piRules(pi: ExtensionAPI) {
 			warnings.push(`always-apply rules total ${alwaysKb.toFixed(1)}KB of system prompt — consider trimming`);
 		}
 
+		projectContext = discoverProjectContext(ctx.cwd);
+		warnings.push(...projectContext.warnings);
+
 		if (!ctx.hasUI || rules.length === 0) return;
 		const always = rules.filter((rule) => rule.alwaysApply).length;
 		const globs = rules.filter((rule) => !rule.alwaysApply && rule.globs.length > 0).length;
@@ -142,6 +152,10 @@ export default function piRules(pi: ExtensionAPI) {
 			// A host without readable history behaves like a fresh session.
 		}
 		navigation = initNavigationState(ctx.cwd, history);
+		const rootContext = rootContextFilePath(ctx.cwd);
+		if (rootContext !== null && projectContext.files.some((file) => file.name === "CONTEXT.md")) {
+			navigation.seen.add(rootContext);
+		}
 	});
 
 	// Re-arm the Globs dedup gate so already-fired rules can fire again after
@@ -177,6 +191,11 @@ export default function piRules(pi: ExtensionAPI) {
 		let changed = false;
 		if (rules.length > 0) {
 			prompt += `\n\n${buildRulesSection(rules)}`;
+			changed = true;
+		}
+		const contextSection = buildProjectContextSection(projectContext);
+		if (contextSection !== "") {
+			prompt += `\n\n${contextSection}`;
 			changed = true;
 		}
 		if (navigation.launchDir !== null) {
@@ -300,6 +319,6 @@ export default function piRules(pi: ExtensionAPI) {
 		getActivated: () => activated,
 		getWarnings: () => warnings,
 		rescan,
-	}, { getNavigationState });
-	registerListContextCommand(pi, { getNavigationState });
+	}, { getNavigationState, getProjectContext: () => projectContext });
+	registerListContextCommand(pi, { getNavigationState, getProjectContext: () => projectContext });
 }
