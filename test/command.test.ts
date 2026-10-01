@@ -110,6 +110,7 @@ describe("buildReport with navigation view", () => {
 	it("appends the context section after the rules report (AC-017)", () => {
 		const lines = buildReport(emptyRulesView, {
 			getNavigationState: () => navState({ delivered: ["CLAUDE.md"] }),
+			getProjectContext: () => ({ root: null, files: [], graph: null, graphStale: false, warnings: [] }),
 		});
 		const text = lines.join("\n");
 		expect(text).toContain("pi-rules — 0 rules · 0 activated this session");

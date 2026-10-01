@@ -28,6 +28,14 @@ _Avoid_: rules folder, origin
 The one-time injection of a Globs Rule's full content into a tool result when the agent touches a matching file. Happens at most once per session per Rule; resets on rescan or `session_before_compact` (so already-fired rules can re-fire once after the conversation has been folded into a compaction summary).
 _Avoid_: trigger, firing
 
+**Project Context File**:
+A markdown file at the project root (`CONTEXT.md`, `architecture.md`) whose full content lives permanently in the system prompt as domain context, separate from Rules. Never truncated; an oversized set raises a startup warning. A root Project Context File delivered this way is not re-delivered by navigation context.
+_Avoid_: context file, doc injection, auto-doc
+
+**Graph Summary**:
+The condensed representation of a project's `graphify-out` knowledge graph placed in the system prompt: the content of `GRAPH_REPORT.md` when present, otherwise minimal stats synthesized from `graph.json` (node/edge/community counts and principal community names). The full graph is never loaded.
+_Avoid_: graph injection, graph dump
+
 **Rule Extraction**:
 The derivation of Rules from conventions actually observed in a codebase, performed by the `/extract-rules` prompt template shipped with the package. Extraction produces Globs Rules or On-Demand Rules — never Always-Apply Rules — written as individual files into the project's `.pi/rules` Rule Source.
 _Avoid_: import, bootstrap, generation

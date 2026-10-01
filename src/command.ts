@@ -1,6 +1,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Rule } from "./parser";
 import type { NavigationState } from "./context";
+import type { ProjectContextState } from "./projectContext";
 import { alwaysApplyRules, globsRules, onDemandRules } from "./prompt";
 
 /**
@@ -19,6 +20,7 @@ export interface RulesView {
  */
 export interface NavigationView {
 	getNavigationState(): NavigationState;
+	getProjectContext(): ProjectContextState;
 }
 
 /** Widget key shared by both status widgets: whichever command rendered
@@ -86,6 +88,7 @@ export function buildReport(view: RulesView, nav?: NavigationView): string[] {
 	);
 
 	if (nav !== undefined) {
+		lines.push(...buildProjectContextReportSection(nav.getProjectContext()));
 		lines.push(...buildContextSection(nav.getNavigationState()));
 	}
 	return lines;
@@ -95,6 +98,20 @@ export function buildReport(view: RulesView, nav?: NavigationView): string[] {
  * Compact navigation-context section of the /rules report: counts and the
  * tracked directory, plus each skipped file with its reason.
  */
+export function buildProjectContextReportSection(context: ProjectContextState): string[] {
+	if (context.files.length === 0 && context.graph === null) return [];
+	const lines = ["PROJECT CONTEXT (system prompt)"];
+	for (const file of context.files) {
+		lines.push(` 📄 ${pad(file.displayPath, 30)} ${formatKb(file.sizeKb)}`);
+	}
+	if (context.graph !== null) {
+		const stale = context.graphStale ? " · ⚠ STALE" : "";
+		lines.push(` 🕸 ${pad(context.graph.displayPath, 30)} ${formatKb(context.graph.sizeKb)}${stale}`);
+	}
+	lines.push("");
+	return lines;
+}
+
 export function buildContextSection(nav: NavigationState): string[] {
 	if (nav.launchDir === null) {
 		return ["CONTEXT (navigation)", " inactive — launch directory unavailable"];
